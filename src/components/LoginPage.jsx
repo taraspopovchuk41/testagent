@@ -1,43 +1,45 @@
 import { useState } from 'react'
 import { 
   Bot, 
-  Mail, 
-  Lock, 
-  User, 
-  Eye, 
+  Mail,
+  Lock,
+  User,
+  Eye,
   EyeOff,
   ArrowRight,
   Sparkles,
-  Zap,
   Shield,
   Brain,
   MessageCircle,
   FileText,
-  Upload,
-  CheckCircle,
-  AlertCircle
+  AlertCircle,
+  CheckCircle
 } from 'lucide-react'
 import { useAuth } from '../contexts/AuthContext'
 
 const LoginPage = () => {
   const [isLogin, setIsLogin] = useState(true)
-  const [showPassword, setShowPassword] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState('')
+  const [showPassword, setShowPassword] = useState(false)
+  const [showVerification, setShowVerification] = useState(false)
+  const [verificationCode, setVerificationCode] = useState('')
+  const [pendingEmail, setPendingEmail] = useState('')
+  const [pendingUsername, setPendingUsername] = useState('')
   const [formData, setFormData] = useState({
     email: '',
     password: '',
     name: '',
     confirmPassword: ''
   })
-  const { login, signup } = useAuth()
+  const { login, signup, confirmSignUpCode } = useAuth()
 
   const handleInputChange = (e) => {
     setFormData(prev => ({
       ...prev,
       [e.target.name]: e.target.value
     }))
-    setError('') // Clear error when user types
+    setError('')
   }
 
   const handleSubmit = async (e) => {
@@ -46,23 +48,60 @@ const LoginPage = () => {
     setError('')
 
     try {
-      let result
       if (isLogin) {
-        result = await login(formData.email, formData.password)
+        // Login with custom UI
+        const result = await login(formData.email, formData.password)
+        if (!result.success) {
+          setError(result.error)
+        }
       } else {
+        // Signup with custom UI
         if (formData.password !== formData.confirmPassword) {
           setError('Passwords do not match')
           setIsLoading(false)
           return
         }
-        result = await signup(formData.email, formData.password, formData.name)
-      }
-
-      if (!result.success) {
-        setError(result.error)
+        
+        const result = await signup(formData.email, formData.password, formData.name)
+        
+        if (result.success && result.requiresConfirmation) {
+          setPendingEmail(result.email)
+          setPendingUsername(result.username)  // Store the generated username
+          setShowVerification(true)
+          setError('')
+        } else if (!result.success) {
+          setError(result.error)
+        }
       }
     } catch (err) {
       setError('An error occurred. Please try again.')
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
+  const handleVerificationSubmit = async (e) => {
+    e.preventDefault()
+    setIsLoading(true)
+    setError('')
+
+    try {
+      // Use the username (not email) for confirmation
+      const result = await confirmSignUpCode(pendingUsername, verificationCode)
+      
+      if (result.success) {
+        // Auto sign in after confirmation using email
+        const loginResult = await login(pendingEmail, formData.password)
+        if (!loginResult.success) {
+          setError('Account verified! Please sign in.')
+          setShowVerification(false)
+          setIsLogin(true)
+        }
+      } else {
+        setError(result.error)
+      }
+    } catch (err) {
+      setError('Verification failed. Please try again.')
     } finally {
       setIsLoading(false)
     }
@@ -157,14 +196,14 @@ const LoginPage = () => {
                 </button>
               </div>
 
-              {/* Test Credentials Info */}
-              <div className="mb-6 p-4 bg-blue-500/20 border border-blue-400/30 rounded-xl">
-                <div className="flex items-center space-x-2 text-blue-300 text-sm">
-                  <Zap className="w-4 h-4" />
-                  <span className="font-medium">Test Credentials:</span>
+              {/* Info Message */}
+              <div className="mb-6 p-4 bg-purple-500/20 border border-purple-400/30 rounded-xl">
+                <div className="flex items-center space-x-2 text-purple-300 text-sm">
+                  <Shield className="w-4 h-4" />
+                  <span className="font-medium">Secure Authentication</span>
                 </div>
-                <p className="text-blue-200 text-sm mt-1">
-                  Email: test@mail.com | Password: test123
+                <p className="text-purple-200 text-sm mt-1">
+                  Powered by AWS Cognito for enterprise-grade security
                 </p>
               </div>
 
@@ -227,6 +266,11 @@ const LoginPage = () => {
                       {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
                     </button>
                   </div>
+                  {!isLogin && (
+                    <p className="text-xs text-gray-400 mt-1">
+                      Min 8 characters with uppercase, lowercase, and numbers
+                    </p>
+                  )}
                 </div>
 
                 {/* Confirm Password field for signup */}
@@ -250,7 +294,7 @@ const LoginPage = () => {
 
                 {/* Error Message */}
                 {error && (
-                  <div className="flex items-center space-x-2 text-red-400 text-sm">
+                  <div className="flex items-center space-x-2 text-red-400 text-sm p-3 bg-red-500/10 border border-red-400/30 rounded-xl">
                     <AlertCircle size={16} />
                     <span>{error}</span>
                   </div>
@@ -287,6 +331,81 @@ const LoginPage = () => {
           </div>
         </div>
       </div>
+
+      {/* Verification Modal */}
+      {showVerification && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="bg-gradient-to-br from-indigo-900 via-purple-900 to-pink-900 rounded-3xl p-8 max-w-md w-full border border-white/20 shadow-2xl">
+            <div className="text-center mb-6">
+              <div className="w-16 h-16 bg-gradient-to-r from-purple-500 to-pink-500 rounded-full flex items-center justify-center mx-auto mb-4">
+                <Mail className="w-8 h-8 text-white" />
+              </div>
+              <h2 className="text-2xl font-bold text-white mb-2">Verify Your Email</h2>
+              <p className="text-gray-300 text-sm">
+                We've sent a verification code to <span className="font-semibold text-purple-300">{pendingEmail}</span>
+              </p>
+            </div>
+
+            <form onSubmit={handleVerificationSubmit} className="space-y-6">
+              <div className="space-y-2">
+                <label className="text-sm font-medium text-gray-200">Verification Code</label>
+                <input
+                  type="text"
+                  value={verificationCode}
+                  onChange={(e) => setVerificationCode(e.target.value)}
+                  className="w-full px-4 py-4 bg-white/10 border border-white/20 rounded-xl text-white text-center text-2xl tracking-widest placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all duration-300"
+                  placeholder="000000"
+                  maxLength={6}
+                  required
+                />
+              </div>
+
+              {error && (
+                <div className="flex items-center space-x-2 text-red-400 text-sm p-3 bg-red-500/10 border border-red-400/30 rounded-xl">
+                  <AlertCircle size={16} />
+                  <span>{error}</span>
+                </div>
+              )}
+
+              <div className="space-y-3">
+                <button
+                  type="submit"
+                  disabled={isLoading}
+                  className="w-full flex items-center justify-center space-x-2 py-4 bg-gradient-to-r from-purple-500 to-pink-500 text-white rounded-xl hover:from-purple-600 hover:to-pink-600 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-300 font-medium shadow-lg"
+                >
+                  {isLoading ? (
+                    <>
+                      <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                      <span>Verifying...</span>
+                    </>
+                  ) : (
+                    <>
+                      <CheckCircle size={18} />
+                      <span>Verify Email</span>
+                    </>
+                  )}
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowVerification(false)
+                    setVerificationCode('')
+                    setError('')
+                  }}
+                  className="w-full py-3 text-gray-300 hover:text-white transition-colors text-sm"
+                >
+                  Cancel
+                </button>
+              </div>
+
+              <p className="text-center text-xs text-gray-400">
+                Didn't receive the code? Check your spam folder or contact support.
+              </p>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

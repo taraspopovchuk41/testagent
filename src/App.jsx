@@ -1,34 +1,32 @@
-import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom'
+import { BrowserRouter as Router, Routes, Route } from 'react-router-dom'
 import { AuthProvider, useAuth } from './contexts/AuthContext'
 import ChatInterface from './components/ChatInterface'
 import LoginPage from './components/LoginPage'
 import './App.css'
 
-// Protected Route Component
-const ProtectedRoute = ({ children }) => {
-  const { isAuthenticated } = useAuth()
-  return isAuthenticated ? children : <Navigate to="/login" replace />
-}
-
 // Main App Content
 const AppContent = () => {
-  const { isAuthenticated, user } = useAuth()
+  const { isAuthenticated, isLoading, user } = useAuth()
+
+  // Show loading state while checking authentication
+  if (isLoading) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900 flex items-center justify-center">
+        <div className="text-center">
+          <div className="w-16 h-16 border-4 border-purple-500 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
+          <p className="text-white text-lg">Loading...</p>
+        </div>
+      </div>
+    )
+  }
 
   return (
     <Router>
       <div className="min-h-screen bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900">
         <Routes>
           <Route 
-            path="/login" 
-            element={!isAuthenticated ? <LoginPage /> : <Navigate to="/" replace />} 
-          />
-          <Route 
             path="/" 
-            element={
-              <ProtectedRoute>
-                <ChatInterface user={user} />
-              </ProtectedRoute>
-            } 
+            element={isAuthenticated ? <ChatInterface user={user} /> : <LoginPage />} 
           />
         </Routes>
       </div>

@@ -4,20 +4,21 @@ A modern, responsive React frontend for an AI agent with AWS Cognito authenticat
 
 ## Features
 
-- 🔐 **AWS Cognito Authentication** - Secure login/signup with SSO
+- 🔐 **AWS Cognito Authentication** - Secure login/signup with OIDC
 - 💬 **Real-time Chat Interface** - Modern chat UI with message bubbles
 - 📁 **File Upload** - Drag & drop file upload with progress tracking
 - 📱 **Responsive Design** - Mobile-first design with Tailwind CSS
 - 🎨 **Modern UI/UX** - Beautiful gradients and animations
 - 📊 **Chat History** - Manage multiple chat sessions
-- 🚀 **AWS Amplify Ready** - Configured for easy deployment
+- 🚀 **AWS Ready** - Configured for easy deployment to CloudFront
 
 ## Tech Stack
 
 - **React 19** - Latest React with hooks
 - **Vite** - Fast build tool and dev server
 - **Tailwind CSS** - Utility-first CSS framework
-- **AWS Amplify** - Authentication and deployment
+- **AWS Cognito** - Authentication with OIDC
+- **react-oidc-context** - OIDC authentication library
 - **React Router** - Client-side routing
 - **Lucide React** - Beautiful icons
 - **Headless UI** - Accessible UI components
@@ -38,26 +39,13 @@ npm install
 
 ### 2. Configure AWS Cognito
 
-1. Go to AWS Console → Cognito → User Pools
-2. Create a new User Pool or use existing one
-3. Update `src/amplifyconfiguration.js` with your credentials:
+📖 **See [COGNITO_SETUP.md](./COGNITO_SETUP.md) for detailed AWS Cognito configuration instructions.**
 
-```javascript
-const awsconfig = {
-  Auth: {
-    Cognito: {
-      userPoolId: 'us-east-1_XXXXXXXXX', // Your User Pool ID
-      userPoolClientId: 'XXXXXXXXXXXXXXXXXXXXXXXXXX', // Your App Client ID
-      loginWith: {
-        email: true,
-        username: true,
-        phone: false,
-      },
-      signUpVerificationMethod: 'code',
-    },
-  },
-};
-```
+Quick setup:
+1. Copy `.env.example` to `.env` (already done)
+2. Update `.env` with your AWS Cognito credentials
+3. Configure callback URLs in AWS Cognito Console (see COGNITO_SETUP.md)
+
 
 ### 3. Development
 
@@ -108,18 +96,20 @@ src/
 │   ├── FileUpload.jsx       # File upload modal
 │   ├── ChatHistory.jsx     # Chat history sidebar
 │   └── LoginPage.jsx       # Authentication page
-├── amplifyconfiguration.js  # AWS Amplify config
+├── contexts/
+│   └── AuthContext.jsx     # Authentication context with Cognito
 ├── App.jsx                 # Main app component
-├── main.jsx               # App entry point
+├── main.jsx               # App entry point with OIDC setup
 └── index.css              # Global styles
 ```
 
 ## Features Overview
 
 ### Authentication
-- Email/password login and signup
-- AWS Cognito integration
-- Secure session management
+- Email/password login and signup via AWS Cognito Hosted UI
+- OIDC-based authentication with react-oidc-context
+- Secure token management
+- Automatic token refresh
 - User profile display
 
 ### Chat Interface
@@ -151,9 +141,10 @@ src/
 - Component-specific styles in individual files
 
 ### Authentication
-- Update `amplifyconfiguration.js` for different Cognito settings
+- Update `.env` for different Cognito settings
 - Modify `LoginPage.jsx` for custom auth UI
-- Add additional auth providers in Amplify config
+- Update `src/contexts/AuthContext.jsx` for additional auth logic
+- Configure Cognito Hosted UI in AWS Console for branding
 
 ### Chat Features
 - Extend `ChatInterface.jsx` for additional features
@@ -162,13 +153,13 @@ src/
 
 ## Environment Variables
 
-Create a `.env` file for local development:
+A `.env` file has been created for local development. See `.env.example` for all available options:
 
 ```env
-VITE_AWS_REGION=us-east-1
-VITE_USER_POOL_ID=us-east-1_XXXXXXXXX
-VITE_USER_POOL_CLIENT_ID=XXXXXXXXXXXXXXXXXXXXXXXXXX
+
 ```
+
+⚠️ **Important:** Never commit `.env` file to version control. It's already in `.gitignore`.
 
 ## Contributing
 
