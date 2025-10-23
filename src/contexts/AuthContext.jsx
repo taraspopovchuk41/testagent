@@ -4,12 +4,16 @@ import { signIn, signUp, signOut, getCurrentUser, fetchUserAttributes, confirmSi
 // Create Auth Context
 const AuthContext = createContext()
 
+// Get verified company domains from environment
+const VERIFIED_DOMAINS = import.meta.env.VITE_VERIFIED_DOMAINS?.split(',').map(d => d.trim().toLowerCase()) || []
+
 // Auth Provider Component using AWS Amplify Auth
 export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null)
   const [isAuthenticated, setIsAuthenticated] = useState(false)
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState(null)
+  const [ssoEmail, setSsoEmail] = useState(null) // Store email for SSO verification
 
   // Check if user is already authenticated on mount
   useEffect(() => {
@@ -146,8 +150,130 @@ export const AuthProvider = ({ children }) => {
       await signOut()
       setUser(null)
       setIsAuthenticated(false)
+      setSsoEmail(null)
     } catch (err) {
       console.error('Logout error:', err)
+    }
+  }
+
+  // Check if email domain is verified for SSO
+  const isVerifiedDomain = (email) => {
+    if (!email || VERIFIED_DOMAINS.length === 0) return false
+    const domain = email.split('@')[1]?.toLowerCase()
+    return VERIFIED_DOMAINS.includes(domain)
+  }
+
+  // SSO Login - Step 1: Send verification code to email
+  const initiateSSOLogin = async (email) => {
+    try {
+      setError(null)
+      
+      // Check if domain is verified
+      if (!isVerifiedDomain(email)) {
+        const errorMessage = `Access denied. The domain "${email.split('@')[1]}" is not a verified company domain.`
+        setError(errorMessage)
+        return { success: false, error: errorMessage }
+      }
+
+      // Generate a secure random password for SSO users (they won't need to remember it)
+      const randomPassword = `SSO${Math.random().toString(36).substring(2, 15)}${Math.random().toString(36).substring(2, 15)}!Aa1#`
+      const username = `sso_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`
+      
+      try {
+        // Try to create a new SSO user
+        const result = await signUp({
+          username: username,
+          password: randomPassword,
+          options: {
+            userAttributes: {
+              email: email,
+              name: email.split('@')[0],
+            },
+            autoSignIn: false
+          }
+        })
+        
+        // Store SSO credentials temporarily for auto-login after verification
+        sessionStorage.setItem('ssoEmail', email)
+        sessionStorage.setItem('ssoUsername', username)
+        sessionStorage.setItem('ssoPassword', randomPassword)
+        
+        setSsoEmail(email)
+        return { 
+          success: true, 
+          requiresVerification: true,
+          email: email,
+          username: username,
+          message: 'Verification code sent to your company email'
+        }
+      } catch (err) {
+        // If user already exists with this email, they should use regular login
+        if (err.name === 'UsernameExistsException' || err.message?.includes('already exists') || err.message?.includes('email')) {
+          const errorMessage = 'An account with this email already exists. Please use the regular sign-in option with your password.'
+          setError(errorMessage)
+          return { success: false, error: errorMessage }
+        }
+        
+        console.error('SSO initiation error:', err)
+        return { success: false, error: err.message || 'Failed to initiate SSO login' }
+      }
+    } catch (err) {
+      console.error('SSO error:', err)
+      return { success: false, error: 'Failed to initiate SSO login' }
+    }
+  }
+
+  // SSO Login - Step 2: Verify code and complete login
+  const completeSSOLogin = async (verificationCode) => {
+    try {
+      setError(null)
+      
+      // Retrieve stored SSO credentials
+      const email = sessionStorage.getItem('ssoEmail')
+      const username = sessionStorage.getItem('ssoUsername')
+      const password = sessionStorage.getItem('ssoPassword')
+      
+      if (!email || !username || !password) {
+        return { success: false, error: 'Session expired. Please start SSO login again.' }
+      }
+      
+      // Confirm the sign up with the code
+      await confirmSignUp({
+        username: username,
+        confirmationCode: verificationCode
+      })
+      
+      // Auto-login after successful verification
+      const { isSignedIn } = await signIn({
+        username: email, // Use email since it's set as alias
+        password: password,
+      })
+
+      if (isSignedIn) {
+        // Clear SSO credentials from session storage
+        sessionStorage.removeItem('ssoEmail')
+        sessionStorage.removeItem('ssoUsername')
+        sessionStorage.removeItem('ssoPassword')
+        
+        await checkAuthStatus()
+        return { success: true }
+      }
+      
+      return { success: false, error: 'Failed to complete sign in' }
+    } catch (err) {
+      console.error('SSO completion error:', err)
+      let errorMessage = 'Invalid verification code'
+      
+      if (err.name === 'CodeMismatchException') {
+        errorMessage = 'Invalid verification code. Please try again.'
+      } else if (err.name === 'ExpiredCodeException') {
+        errorMessage = 'Verification code has expired. Please start SSO login again.'
+      } else if (err.name === 'NotAuthorizedException') {
+        errorMessage = 'Authentication failed. Please try again.'
+      }
+      
+      setError(errorMessage)
+      return { success: false, error: errorMessage }
     }
   }
 
@@ -157,9 +283,14 @@ export const AuthProvider = ({ children }) => {
       isAuthenticated,
       isLoading,
       error,
+      ssoEmail,
+      verifiedDomains: VERIFIED_DOMAINS,
       login,
       signup,
       confirmSignUpCode,
+      initiateSSOLogin,
+      completeSSOLogin,
+      isVerifiedDomain,
       logout,
     }}>
       {children}
